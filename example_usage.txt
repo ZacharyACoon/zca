@@ -23,3 +23,7 @@ password to encrypt server key?:
 password to decrypt intermediary key?:
 password to decrypt server key?:
 /home/zac/work/PyCharmProjects/zca/TestOrg_ca/root/intermediaries/Intermediary1/servers/example.com/certificates/TestOrg_Intermediary1_example.com_certificate_1537468535.pem
+
+cd TestOrg_ca/root
+openssl verify -verbose -CAfile <(cat certificates/TestOrg_root_certificate_1537468463.pem intermediaries/Intermediary1/certificates/TestOrg_Intermediary1_certificate_1537468508.pem) intermediaries/Intermediary1/servers/example.com/certificates/TestOrg_Intermediary1_example.com_certificate_1537468535.pem
+intermediaries/Intermediary1/servers/example.com/certificates/TestOrg_Intermediary1_example.com_certificate_1537468535.pem: OK
