@@ -14,10 +14,8 @@ def generate_key(private_key_file, password, public_key_file, yubikey=False):
     """generate password protected key"""
 
     # yubikeys (4) support RSA2048,ECCp256,384
-    if yubikey:
-        curve = ec.SECP384R1
-    else:
-        curve = ec.SECP521R1
+    # chrome supports up to 384
+    curve = ec.SECP384R1
 
     key = ec.generate_private_key(
         curve=curve,
