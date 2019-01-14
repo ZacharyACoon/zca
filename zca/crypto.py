@@ -131,7 +131,7 @@ def generate_intermediary_certificate(root_key, root_cert, intermediary, interme
         public_key=intermediary_public_key,
         serial_number=x509.random_serial_number(),
         not_valid_before=datetime.utcnow(),
-        not_valid_after=datetime.utcnow() + timedelta(days=365 * 1),
+        not_valid_after=datetime.utcnow() + timedelta(days=365 * 3),
         extensions=[]
     ).add_extension(
         critical=True,
@@ -223,8 +223,6 @@ def generate_web_server_certificate(intermediary_key, intermediary_cert, server_
         algorithm=hashes.SHA384(),
         backend=default_backend(),
     )
-    x509.cer
-    x509.certificate_transparency.SignedCertificateTimestamp()
     with open(new_cert_path, mode='wb', opener=mode_openers.public_file_opener) as f:
         f.write(cert.public_bytes(Encoding.PEM))
 

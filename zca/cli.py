@@ -54,7 +54,7 @@ def generate_root_cert(ctx):
 @cli.command()
 @click.pass_context
 @click.argument("intermediary")
-@click.option("--yubikey/--no-yubikey", default=False)
+#@click.option("--yubikey/--no-yubikey", default=False)
 def generate_intermediary_key(ctx, intermediary):
     """generate key for org intermediary"""
     paths = ctx.obj
@@ -236,7 +236,7 @@ def generate_web_server_cert_chain(ctx, intermediary, web_server):
 @click.pass_context
 @click.argument("intermediary")
 @click.argument("web_server")
-def generate_web_server_cert_chain_nginx(ctx, intermediary, web_server):
+def generate_web_server_cert_chain_reverse(ctx, intermediary, web_server):
     paths = ctx.obj
     paths.init_intermediary_paths(intermediary)
     paths.init_server_paths(web_server)
@@ -253,7 +253,7 @@ def generate_web_server_cert_chain_nginx(ctx, intermediary, web_server):
     with open(paths.intermediary_certificate_last, 'r') as f:
         intermediary_pem = f.read()
 
-    chain_cert_name = paths.server_certificate_dir / f"{paths.server_certificate_last.stem}_nginx_chain.pem"
+    chain_cert_name = paths.server_certificate_chain_dir / f"{paths.server_certificate_last.stem}_chain_reverse.pem"
     with open(chain_cert_name, mode='w', opener=mode_openers.public_file_opener) as f:
         f.write(server_pem)
         f.write(intermediary_pem)
