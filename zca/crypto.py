@@ -4,8 +4,8 @@ from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography import x509
-from datetime import timedelta, datetime
-import os
+
+from datetime import timedelta
 from datetime import datetime
 from . import mode_openers
 
@@ -62,18 +62,27 @@ def load_public_key(file):
     return key
 
 
+def load_cert(file):
+    with open(file, 'rb') as f:
+        cert = x509.load_pem_x509_certificate(
+            f.read(),
+            backend=default_backend()
+        )
+    return cert
+
+
 def generate_root_certificate(new_cert_path, root_key, organization_name):
     """generate a self signed root certificate expiring in 20 years"""
-    name = x509.Name(
+    subject_name = x509.Name(
         [
             x509.NameAttribute(x509.NameOID.ORGANIZATION_NAME, organization_name),
+            x509.NameAttribute(x509.NameOID.ORGANIZATIONAL_UNIT_NAME, 'root'),
             x509.NameAttribute(x509.NameOID.COMMON_NAME, 'root'),
-            # x509.NameAttribute(x509.NameOID.USER_ID, 'root'),
         ]
     )
     cert = x509.CertificateBuilder(
-        issuer_name=name,
-        subject_name=name,
+        issuer_name=subject_name,
+        subject_name=subject_name,
         public_key=root_key.public_key(),
         serial_number=x509.random_serial_number(),
         not_valid_before=datetime.utcnow(),
@@ -107,27 +116,19 @@ def generate_root_certificate(new_cert_path, root_key, organization_name):
         f.write(cert.public_bytes(Encoding.PEM))
 
 
-def generate_intermediary_certificate(organization_name, root_key, intermediary, intermediary_key, new_cert_path):
+def generate_intermediary_certificate(root_key, root_cert, intermediary, intermediary_public_key, new_cert_path):
     """generate an intermediary certificate expiring in 1 year"""
-    issuer_name = x509.Name(
-        [
-            x509.NameAttribute(x509.NameOID.ORGANIZATION_NAME, organization_name),
-            x509.NameAttribute(x509.NameOID.COMMON_NAME, 'root'),
-        ]
-    )
-
     subject_name = x509.Name(
         [
-            x509.NameAttribute(x509.NameOID.ORGANIZATION_NAME, organization_name),
+            root_cert.subject.get_attributes_for_oid(x509.NameOID.ORGANIZATION_NAME)[0],
             x509.NameAttribute(x509.NameOID.COMMON_NAME, intermediary),
-            # x509.NameAttribute(x509.NameOID.USER_ID, intermediary),
         ]
     )
 
     cert = x509.CertificateBuilder(
-        issuer_name=issuer_name,
+        issuer_name=root_cert.subject,
         subject_name=subject_name,
-        public_key=intermediary_key,
+        public_key=intermediary_public_key,
         serial_number=x509.random_serial_number(),
         not_valid_before=datetime.utcnow(),
         not_valid_after=datetime.utcnow() + timedelta(days=365 * 1),
@@ -160,23 +161,22 @@ def generate_intermediary_certificate(organization_name, root_key, intermediary,
         f.write(cert.public_bytes(Encoding.PEM))
 
 
-def generate_web_server_certificate(organization_name, intermediary_key, intermediary, server_public_key, server, names, new_cert_path):
+def generate_web_server_certificate(intermediary_key, intermediary_cert, server_public_key, server, names, new_cert_path):
+
     """generate a web server certificate expiring in 1 year"""
-    issuer_name = x509.Name(
-        [
-            x509.NameAttribute(x509.NameOID.ORGANIZATION_NAME, organization_name),
-            x509.NameAttribute(x509.NameOID.COMMON_NAME, intermediary),
-        ]
-    )
     subject_name = x509.Name(
         [
-            x509.NameAttribute(x509.NameOID.ORGANIZATION_NAME, organization_name),
+            intermediary_cert.subject.get_attributes_for_oid(x509.NameOID.ORGANIZATION_NAME)[0],
             x509.NameAttribute(x509.NameOID.COMMON_NAME, server),
-            #x509.NameAttribute(x509.NameOID.USER_ID, server),
+
+            # TODO: ExtendedValidation
+            # x509.NameAttribute(x509.NameOID.JURISDICTION_COUNTRY_NAME, "Earth"),
+            # x509.NameAttribute(x509.NameOID.BUSINESS_CATEGORY, )
         ]
     )
+
     cert = x509.CertificateBuilder(
-        issuer_name=issuer_name,
+        issuer_name=intermediary_cert.subject,
         subject_name=subject_name,
         public_key=server_public_key,
         serial_number=x509.random_serial_number(),
@@ -212,42 +212,39 @@ def generate_web_server_certificate(organization_name, intermediary_key, interme
         extension=x509.ExtendedKeyUsage(
             [x509.oid.ExtendedKeyUsageOID.SERVER_AUTH]
         )
-    ).add_extension(
-        critical=True,
-        extension=x509.PrecertificateSignedCertificateTimestamps(
-            []
-        )
+    # TODO: ExtendedValidation
+    # ).add_extension(
+    #     critical=True,
+    #     extension=x509.PrecertificateSignedCertificateTimestamps(
+    #         []
+    #     )
     ).sign(
         private_key=intermediary_key,
         algorithm=hashes.SHA384(),
         backend=default_backend(),
     )
+    x509.cer
+    x509.certificate_transparency.SignedCertificateTimestamp()
     with open(new_cert_path, mode='wb', opener=mode_openers.public_file_opener) as f:
         f.write(cert.public_bytes(Encoding.PEM))
 
 
-def generate_user_certificate(organization_name, intermediary_key, intermediary, user_public_key, username, new_cert_path):
+def generate_user_certificate(intermediary_key, intermediary_cert, user_public_key, username, new_cert_path):
     """generate a web server certificate expiring in 1 year"""
-    issuer_name = x509.Name(
-        [
-            x509.NameAttribute(x509.NameOID.ORGANIZATION_NAME, organization_name),
-            x509.NameAttribute(x509.NameOID.COMMON_NAME, intermediary),
-        ]
-    )
     subject_name = x509.Name(
         [
-            x509.NameAttribute(x509.NameOID.ORGANIZATION_NAME, organization_name),
+            intermediary_cert.subject.get_attributes_for_oid(x509.NameOID.ORGANIZATION_NAME)[0],
             x509.NameAttribute(x509.NameOID.COMMON_NAME, username),
             x509.NameAttribute(x509.NameOID.USER_ID, username),
         ]
     )
     cert = x509.CertificateBuilder(
-        issuer_name=issuer_name,
+        issuer_name=intermediary_cert.subject,
         subject_name=subject_name,
         public_key=user_public_key,
         serial_number=x509.random_serial_number(),
         not_valid_before=datetime.utcnow(),
-        not_valid_after=datetime.utcnow() + timedelta(days=365 * 1),
+        not_valid_after=datetime.utcnow() + timedelta(days=365 * 2),
         extensions=[]
     ).add_extension(
         critical=True,
@@ -267,6 +264,11 @@ def generate_user_certificate(organization_name, intermediary_key, intermediary,
             crl_sign=False,
             encipher_only=False,
             decipher_only=False,
+        )
+    ).add_extension(
+        critical=True,
+        extension=x509.ExtendedKeyUsage(
+            [x509.oid.ExtendedKeyUsageOID.CLIENT_AUTH]
         )
     ).sign(
         private_key=intermediary_key,

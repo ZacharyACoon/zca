@@ -48,7 +48,12 @@ class CAPaths(object):
         self.server_key_file = self.server_dir / f"{self.organization_name}_{self.intermediary}_{self.server}_PRIVATE_key.pem"
         self.server_public_key_file = self.server_dir / f"{self.organization_name}_{self.intermediary}_{self.server}_PUBLIC_key.pem"
         self.server_certificate_dir = self.server_dir / 'certificates'
-        makedirs(self.server_certificate_dir, mode=0o775, exist_ok=True)
+        self.server_certificate_chain_dir = self.server_certificate_dir / 'chain'
+
+        certs = list(self.server_certificate_dir.glob("*.pem"))
+        self.server_certificate_last = max(certs, key=getctime) if certs else None
+
+        makedirs(self.server_certificate_chain_dir, mode=0o775, exist_ok=True)
 
     def init_user_paths(self, user):
         """initializes path information based on organization, intermediary, server, user name"""

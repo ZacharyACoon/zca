@@ -55,7 +55,7 @@ def generate_root_cert(ctx):
 @click.pass_context
 @click.argument("intermediary")
 @click.option("--yubikey/--no-yubikey", default=False)
-def generate_intermediary_key(ctx, intermediary, yubikey):
+def generate_intermediary_key(ctx, intermediary):
     """generate key for org intermediary"""
     paths = ctx.obj
     paths.init_intermediary_paths(intermediary)
@@ -64,8 +64,7 @@ def generate_intermediary_key(ctx, intermediary, yubikey):
     crypto.generate_key(
         private_key_file=paths.intermediary_key_file,
         password=intermediary_key_password,
-        public_key_file=paths.intermediary_public_key_file,
-        yubikey=yubikey
+        public_key_file=paths.intermediary_public_key_file
     )
 
 
@@ -82,7 +81,7 @@ def generate_intermediary_cert(ctx, intermediary):
         file=paths.root_key_file,
         password=root_key_password,
     )
-
+    root_cert = crypto.load_cert(paths.root_certificate_last)
     intermediary_public_key = crypto.load_public_key(
         file=paths.intermediary_public_key_file
     )
@@ -90,10 +89,10 @@ def generate_intermediary_cert(ctx, intermediary):
     cert_file_name = f"{paths.organization_name}_{intermediary}_certificate_{int(datetime.utcnow().timestamp())}.pem"
     new_cert_file = paths.intermediary_certificate_dir / cert_file_name
     crypto.generate_intermediary_certificate(
-        organization_name=paths.organization_name,
         root_key=root_key,
+        root_cert=root_cert,
         intermediary=intermediary,
-        intermediary_key=intermediary_public_key,
+        intermediary_public_key=intermediary_public_key,
         new_cert_path=new_cert_file,
     )
 
@@ -133,6 +132,7 @@ def generate_web_server_cert(ctx, intermediary, server, names):
         file=paths.intermediary_key_file,
         password=intermediary_key_password
     )
+    intermediary_cert = crypto.load_cert(paths.intermediary_certificate_last)
 
     server_public_key = crypto.load_public_key(file=paths.server_public_key_file)
 
@@ -140,9 +140,8 @@ def generate_web_server_cert(ctx, intermediary, server, names):
     new_cert_file = paths.server_certificate_dir / cert_file_name
 
     crypto.generate_web_server_certificate(
-        organization_name=paths.organization_name,
         intermediary_key=intermediary_key,
-        intermediary=paths.intermediary,
+        intermediary_cert=intermediary_cert,
         server_public_key=server_public_key,
         server=server,
         names=names,
@@ -155,7 +154,7 @@ def generate_web_server_cert(ctx, intermediary, server, names):
 @click.argument("intermediary")
 @click.argument("user")
 @click.option("--yubikey/--no-yubikey", default=False)
-def generate_user_key(ctx, intermediary, user, yubikey):
+def generate_user_key(ctx, intermediary, user):
     """generate key for org user under intermediary"""
     paths = ctx.obj
     paths.init_intermediary_paths(intermediary)
@@ -166,17 +165,15 @@ def generate_user_key(ctx, intermediary, user, yubikey):
     crypto.generate_key(
         private_key_file=paths.user_key_file,
         password=user_key_password,
-        public_key_file=paths.user_public_key_file,
-        yubikey=yubikey
+        public_key_file=paths.user_public_key_file
     )
 
 
 @cli.command()
 @click.pass_context
 @click.argument("intermediary")
-@click.argument("user")
-@click.option("--uid")
-def generate_user_cert(ctx, intermediary, user, uid=None):
+@click.argument("username")
+def generate_user_cert(ctx, intermediary, username):
     """generate cert for org user under intermediary"""
     paths = ctx.obj
     paths.init_intermediary_paths(intermediary)
@@ -187,6 +184,7 @@ def generate_user_cert(ctx, intermediary, user, uid=None):
         file=paths.intermediary_key_file,
         password=intermediary_key_password
     )
+    intermediary_cert = crypto.load_cert(paths.intermediary_cert_last)
 
     user_key_password = bytes(click.prompt(text="password to decrypt user key?", default=None, hide_input=True, confirmation_prompt=False), 'utf-8')
     user_key = crypto.load_key(
@@ -199,38 +197,66 @@ def generate_user_cert(ctx, intermediary, user, uid=None):
     new_cert_file = paths.user_certificate_dir / cert_file_name
 
     crypto.generate_user_certificate(
-        organization_name=paths.organization_name,
         intermediary_key=intermediary_key,
-        intermediary=intermediary,
+        intermediary_cert=intermediary_cert,
         user_public_key=user_public_key,
-        username=user,
+        username=username,
         new_cert_path=new_cert_file
     )
 
-# different applications want different chain cert orders, figure out later.
-# @cli.command()
-# @click.pass_context
-# @click.argument("intermediary")
-# def generate_chain_cert(ctx, intermediary):
-#     """generate concatenated root, intermediary chain cert"""
-#     paths = ctx.obj
-#     paths.init_intermediary_paths(intermediary)
-#
-#     if not paths.root_certificate_last:
-#         print("No root certificate found.")
-#         return False
-#     if not paths.intermediary_certificate_last:
-#         print("No intermediary cerfificate found.")
-#         return False
-#
-#     with open(paths.root_certificate_last, 'r') as f:
-#         root_cert = f.read()
-#     with open(paths.intermediary_certificate_last, 'r') as f:
-#         intermediary_cert = f.read()
-#
-#     with open(paths.intermediary_dir / f'{intermediary}_chain.pem', mode='w+', opener=mode_openers.public_file_opener) as f:
-#         f.write(root_cert)
-#         f.write(intermediary_cert)
+
+@cli.command()
+@click.pass_context
+@click.argument("intermediary")
+@click.argument("web_server")
+def generate_web_server_cert_chain(ctx, intermediary, web_server):
+    paths = ctx.obj
+    paths.init_intermediary_paths(intermediary)
+    paths.init_server_paths(web_server)
+
+    if not paths.server_certificate_last:
+        print("No server certificates found.")
+        return False
+    with open(paths.server_certificate_last, 'r') as f:
+        server_pem = f.read()
+
+    if not paths.intermediary_certificate_last:
+        print("No intermediary certificates found.")
+        return False
+    with open(paths.intermediary_certificate_last, 'r') as f:
+        intermediary_pem = f.read()
+
+    chain_cert_name = paths.server_certificate_chain_dir / f"{paths.server_certificate_last.stem}_chain.pem"
+    with open(chain_cert_name, mode='w', opener=mode_openers.public_file_opener) as f:
+        f.write(intermediary_pem)
+        f.write(server_pem)
+
+
+@cli.command()
+@click.pass_context
+@click.argument("intermediary")
+@click.argument("web_server")
+def generate_web_server_cert_chain_nginx(ctx, intermediary, web_server):
+    paths = ctx.obj
+    paths.init_intermediary_paths(intermediary)
+    paths.init_server_paths(web_server)
+
+    if not paths.server_certificate_last:
+        print("No server certificates found.")
+        return False
+    with open(paths.server_certificate_last, 'r') as f:
+        server_pem = f.read()
+
+    if not paths.intermediary_certificate_last:
+        print("No intermediary certificates found.")
+        return False
+    with open(paths.intermediary_certificate_last, 'r') as f:
+        intermediary_pem = f.read()
+
+    chain_cert_name = paths.server_certificate_dir / f"{paths.server_certificate_last.stem}_nginx_chain.pem"
+    with open(chain_cert_name, mode='w', opener=mode_openers.public_file_opener) as f:
+        f.write(server_pem)
+        f.write(intermediary_pem)
 
 
 def run():
