@@ -65,4 +65,14 @@ class CAPaths(object):
         self.user_key_file = self.user_dir / f"{self.organization_name}_{self.intermediary}_{self.user}_PRIVATE_key.pem"
         self.user_public_key_file = self.user_dir / f"{self.organization_name}_{self.intermediary}_{self.user}_PUBLIC_key.pem"
         self.user_certificate_dir = self.user_dir / 'certificates'
-        makedirs(self.user_certificate_dir, mode=0o775, exist_ok=True)
+        self.user_certificate_chain_dir = self.user_certificate_dir / 'chain'
+        makedirs(self.user_certificate_chain_dir, mode=0o775, exist_ok=True)
+
+        certs = list(self.user_certificate_dir.glob("*.pem"))
+        self.user_certificate_last = max(certs, key=getctime) if certs else None
+
+        self.user_ovpn_dir = self.user_dir / 'ovpn'
+        makedirs(self.user_ovpn_dir, mode=0o775, exist_ok=True)
+        ovpns = list(self.user_ovpn_dir.glob("*.ovpn"))
+        self.user_ovpn_last = max(ovpns, key=getctime) if ovpns else None
+

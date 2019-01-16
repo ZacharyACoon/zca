@@ -45,9 +45,10 @@ def generate_key(private_key_file, password, public_key_file, yubikey=False):
 def load_key(file, password):
     """load and return a decrypted key"""
     with open(file, 'rb') as f:
+
         key = serialization.load_pem_private_key(
             data=f.read(),
-            password=password,
+            password=None if not password else password,
             backend=default_backend()
         )
     return key
@@ -121,6 +122,7 @@ def generate_intermediary_certificate(root_key, root_cert, intermediary, interme
     subject_name = x509.Name(
         [
             root_cert.subject.get_attributes_for_oid(x509.NameOID.ORGANIZATION_NAME)[0],
+            x509.NameAttribute(x509.NameOID.ORGANIZATIONAL_UNIT_NAME, intermediary),
             x509.NameAttribute(x509.NameOID.COMMON_NAME, intermediary),
         ]
     )
@@ -167,6 +169,7 @@ def generate_web_server_certificate(intermediary_key, intermediary_cert, server_
     subject_name = x509.Name(
         [
             intermediary_cert.subject.get_attributes_for_oid(x509.NameOID.ORGANIZATION_NAME)[0],
+            intermediary_cert.subject.get_attributes_for_oid(x509.NameOID.ORGANIZATIONAL_UNIT_NAME)[0],
             x509.NameAttribute(x509.NameOID.COMMON_NAME, server),
 
             # TODO: ExtendedValidation
@@ -232,6 +235,7 @@ def generate_user_certificate(intermediary_key, intermediary_cert, user_public_k
     subject_name = x509.Name(
         [
             intermediary_cert.subject.get_attributes_for_oid(x509.NameOID.ORGANIZATION_NAME)[0],
+            intermediary_cert.subject.get_attributes_for_oid(x509.NameOID.ORGANIZATIONAL_UNIT_NAME)[0],
             x509.NameAttribute(x509.NameOID.COMMON_NAME, username),
             x509.NameAttribute(x509.NameOID.USER_ID, username),
         ]
@@ -253,11 +257,11 @@ def generate_user_certificate(intermediary_key, intermediary_cert, user_public_k
     ).add_extension(
         critical=True,
         extension=x509.KeyUsage(
-            digital_signature=False,
-            content_commitment=False,
-            key_encipherment=False,
-            data_encipherment=False,
-            key_agreement=False,
+            digital_signature=True,
+            content_commitment=True,
+            key_encipherment=True,
+            data_encipherment=True,
+            key_agreement=True,
             key_cert_sign=False,
             crl_sign=False,
             encipher_only=False,
@@ -266,7 +270,14 @@ def generate_user_certificate(intermediary_key, intermediary_cert, user_public_k
     ).add_extension(
         critical=True,
         extension=x509.ExtendedKeyUsage(
-            [x509.oid.ExtendedKeyUsageOID.CLIENT_AUTH]
+            [
+                x509.oid.ExtendedKeyUsageOID.CLIENT_AUTH,
+                x509.oid.ExtendedKeyUsageOID.CODE_SIGNING,
+                x509.oid.ExtendedKeyUsageOID.EMAIL_PROTECTION,
+                x509.oid.ExtendedKeyUsageOID.TIME_STAMPING,
+                x509.oid.ExtendedKeyUsageOID.OCSP_SIGNING,
+                x509.oid.ExtendedKeyUsageOID.ANY_EXTENDED_KEY_USAGE,
+            ]
         )
     ).sign(
         private_key=intermediary_key,
