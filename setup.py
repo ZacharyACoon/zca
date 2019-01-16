@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='zca',
-    version='1.0',
+    version='2019.01.16_0',
     url='',
     license='',
     author='cluelessperson',
